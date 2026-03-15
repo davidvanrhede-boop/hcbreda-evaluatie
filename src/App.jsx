@@ -26,21 +26,28 @@ export default function App() {
   const [laden, setLaden] = useState(true)
 
   useEffect(() => {
-    // Controleer of er al een sessie is
     supabase.auth.getSession().then(async ({ data: { session } }) => {
-      if (session?.user) {
-        await laadProfiel(session.user)
+      try {
+        if (session?.user) {
+          await laadProfiel(session.user)
+        }
+      } catch(e) {
+        console.error('Sessie fout:', e)
+      } finally {
+        setLaden(false)
       }
-      setLaden(false)
     })
 
-    // Luister naar auth wijzigingen
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
-      if (session?.user) {
-        await laadProfiel(session.user)
-      } else {
-        setUser(null)
-        setProfiel(null)
+      try {
+        if (session?.user) {
+          await laadProfiel(session.user)
+        } else {
+          setUser(null)
+          setProfiel(null)
+        }
+      } catch(e) {
+        console.error('Auth fout:', e)
       }
     })
 
@@ -49,8 +56,24 @@ export default function App() {
 
   async function laadProfiel(u) {
     setUser(u)
-    const { data } = await supabase.from('profiles').select('*').eq('id', u.id).single()
-    setProfiel(data)
+    try {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('*')
+        .eq('id', u.id)
+        .single()
+      if (error) {
+        console.error('Profiel fout:', error)
+        // Maak een noodprofiel op basis van metadata
+        const meta = u.user_metadata || {}
+        setProfiel({ id: u.id, naam: meta.naam || u.email, rol: meta.rol || 'hot' })
+      } else {
+        setProfiel(data)
+      }
+    } catch(e) {
+      console.error('Profiel ophalen mislukt:', e)
+      setProfiel({ id: u.id, naam: u.email, rol: 'hot' })
+    }
   }
 
   async function handleUitloggen() {
